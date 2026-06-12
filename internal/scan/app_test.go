@@ -53,6 +53,25 @@ func TestReadApp(t *testing.T) {
 	}
 }
 
+func TestScanDirsFindsAppsOneLevelDeep(t *testing.T) {
+	dir := t.TempDir()
+	writeApp(t, dir, "Slack.app", "com.tinyspeck.slackmacgap", "4.39.0", false)
+	writeApp(t, dir, "Things3.app", "com.culturedcode.ThingsMac", "3.20", true)
+	// Non-app dir and nested app must be ignored.
+	os.MkdirAll(filepath.Join(dir, "NotAnApp"), 0o755)
+	nested := filepath.Join(dir, "SomeFolder")
+	os.MkdirAll(nested, 0o755)
+	writeApp(t, nested, "Hidden.app", "com.x.hidden", "1.0", false)
+
+	apps, err := ScanDirs([]string{dir, filepath.Join(dir, "does-not-exist")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apps) != 2 {
+		t.Fatalf("want 2 apps, got %d: %+v", len(apps), apps)
+	}
+}
+
 func TestReadAppDetectsMASReceipt(t *testing.T) {
 	dir := t.TempDir()
 	path := writeApp(t, dir, "Things3.app", "com.culturedcode.ThingsMac", "3.20", true)
