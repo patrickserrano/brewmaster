@@ -195,26 +195,53 @@ func TestReplaceMASRefusesRunningApp(t *testing.T) {
 	}
 }
 
+// funcRunner adapts a function to brew.Runner so tests can record runner
+// calls and Trash calls into one shared sequence.
+type funcRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+func (f funcRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return f(ctx, name, args...)
+}
+
 func TestReplaceMASTrashesThenInstalls(t *testing.T) {
-	r := &fakeRunner{fail: map[string]error{"pgrep": errors.New("not running")}}
-	var trashed string
-	e := Engine{Runner: r, Trash: func(p string) error { trashed = p; return nil }}
+	// Record trash and install in one sequence so we can assert order:
+	// the bundle must be trashed BEFORE brew install runs.
+	var seq []string
+	r := funcRunner(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		cmd := name + " " + strings.Join(args, " ")
+		seq = append(seq, cmd)
+		if strings.HasPrefix(cmd, "pgrep") {
+			return nil, errors.New("not running")
+		}
+		return []byte("ok"), nil
+	})
+	e := Engine{Runner: r, Trash: func(p string) error {
+		seq = append(seq, "trash "+p)
+		return nil
+	}}
 	res := e.ReplaceMAS(context.Background(), MASApp{App: "Things3.app", Path: "/Applications/Things3.app", Token: "things", Executable: "Things"})
 	if res.Outcome != Reinstalled {
 		t.Fatalf("outcome = %v (err=%v)", res.Outcome, res.Err)
 	}
-	if trashed != "/Applications/Things3.app" {
-		t.Errorf("trashed = %q", trashed)
-	}
+	wantTrash := "trash /Applications/Things3.app"
 	wantInstall := "brew install --cask things"
-	found := false
-	for _, c := range r.calls {
-		if c == wantInstall {
-			found = true
+	trashIdx, installIdx := -1, -1
+	for i, c := range seq {
+		switch c {
+		case wantTrash:
+			trashIdx = i
+		case wantInstall:
+			installIdx = i
 		}
 	}
-	if !found {
-		t.Errorf("missing %q in %v", wantInstall, r.calls)
+	if trashIdx == -1 {
+		t.Fatalf("missing %q in sequence %v", wantTrash, seq)
+	}
+	if installIdx == -1 {
+		t.Fatalf("missing %q in sequence %v", wantInstall, seq)
+	}
+	if trashIdx > installIdx {
+		t.Errorf("trash must happen before install: sequence %v", seq)
 	}
 }
 
@@ -227,6 +254,66 @@ func TestReplaceMASInstallFailureSurfaces(t *testing.T) {
 	res := e.ReplaceMAS(context.Background(), MASApp{App: "X.app", Path: "/Applications/X.app", Token: "x", Executable: "X"})
 	if res.Outcome != Failed || res.Err == nil {
 		t.Fatalf("outcome = %v err=%v, want Failed", res.Outcome, res.Err)
+	}
+	if !strings.Contains(res.ErrText, "restore") {
+		t.Errorf("install failure after trashing must hint at restoring from Trash, got %q", res.ErrText)
+	}
+}
+
+func TestReplaceMASNoExecutableFailsClosed(t *testing.T) {
+	// With no executable name we cannot pgrep, so we cannot verify the
+	// app isn't running. Refuse to trash anything.
+	r := &fakeRunner{}
+	e := Engine{Runner: r, Trash: func(string) error {
+		t.Fatal("must not trash when we cannot verify the app is not running")
+		return nil
+	}}
+	res := e.ReplaceMAS(context.Background(), MASApp{App: "X.app", Path: "/Applications/X.app", Token: "x"})
+	if res.Outcome != Failed {
+		t.Fatalf("outcome = %v, want Failed (fail closed)", res.Outcome)
+	}
+	if !strings.Contains(res.ErrText, "cannot verify") || !strings.Contains(res.ErrText, "refusing to replace") {
+		t.Errorf("fail-closed refusal must be explicit, got %q", res.ErrText)
+	}
+	if len(r.calls) != 0 {
+		t.Errorf("must make no calls when failing closed: %v", r.calls)
+	}
+}
+
+func TestReplaceMASNilTrashFails(t *testing.T) {
+	r := &fakeRunner{fail: map[string]error{"pgrep": errors.New("not running")}}
+	e := Engine{Runner: r} // Trash left nil
+	res := e.ReplaceMAS(context.Background(), MASApp{App: "X.app", Path: "/Applications/X.app", Token: "x", Executable: "X"})
+	if res.Outcome != Failed || res.Err == nil {
+		t.Fatalf("outcome = %v err=%v, want Failed with error (not a panic)", res.Outcome, res.Err)
+	}
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "brew install") {
+			t.Errorf("must not install without a Trash implementation: %v", r.calls)
+		}
+	}
+}
+
+func TestReplaceMASCancelledContextReportsCancellation(t *testing.T) {
+	r := &fakeRunner{fail: map[string]error{"pgrep": errors.New("not running")}}
+	e := Engine{Runner: r, Trash: func(string) error {
+		t.Fatal("must not trash on a dead context")
+		return nil
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already dead before we start
+	res := e.ReplaceMAS(ctx, MASApp{App: "X.app", Path: "/Applications/X.app", Token: "x", Executable: "X"})
+	if res.Outcome != Failed {
+		t.Fatalf("outcome = %v, want Failed", res.Outcome)
+	}
+	if strings.Contains(res.ErrText, "is running; quit it first") {
+		t.Errorf("cancellation must not masquerade as a running app, got %q", res.ErrText)
+	}
+	if !strings.Contains(res.ErrText, "cancelled") {
+		t.Errorf("cancellation must be named in the message, got %q", res.ErrText)
+	}
+	if len(r.calls) != 0 {
+		t.Errorf("must make no calls on a dead context: %v", r.calls)
 	}
 }
 

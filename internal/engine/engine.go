@@ -118,6 +118,19 @@ func (e Engine) ReplaceMAS(ctx context.Context, m MASApp) Result {
 		res.ErrText = err.Error()
 		return res
 	}
+	if e.Trash == nil {
+		return fail(fmt.Errorf("no Trash implementation configured; refusing to replace %s", m.App))
+	}
+	if err := ctx.Err(); err != nil {
+		// Don't mislabel a Ctrl-C/timeout as "app is running".
+		return fail(fmt.Errorf("cancelled before replacing %s: %w", m.App, err))
+	}
+	if m.Executable == "" {
+		// Without an executable name we cannot pgrep, so we cannot prove
+		// the app isn't running. Trashing a live bundle is destructive:
+		// fail closed.
+		return fail(fmt.Errorf("cannot verify %s is not running (no executable name); refusing to replace", m.App))
+	}
 	if e.isRunning(ctx, m.Executable) {
 		return fail(fmt.Errorf("%s is running; quit it first", m.App))
 	}
