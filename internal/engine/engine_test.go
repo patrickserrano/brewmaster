@@ -163,6 +163,73 @@ func TestUpgradeAdoptedSurfacesUpgradeError(t *testing.T) {
 	}
 }
 
+func TestUpgradeAdoptedCancelledContextDefersEverything(t *testing.T) {
+	// Mirror of TestAdoptCancelledContextDoesNotEscalate: on a dead
+	// context, every app is treated as running (deferred) and no brew
+	// commands run.
+	r := &fakeRunner{fail: map[string]error{"pgrep": errors.New("exit 1")}} // would report "not running"
+	e := Engine{Runner: r}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already dead before we start
+	deferred, err := e.UpgradeAdopted(ctx, []AdoptedApp{{Token: "slack", Executable: "Slack"}})
+	if err != nil {
+		t.Fatalf("UpgradeAdopted error: %v", err)
+	}
+	if len(deferred) != 1 || deferred[0] != "slack" {
+		t.Errorf("deferred = %v, want [slack]", deferred)
+	}
+	if len(r.calls) != 0 {
+		t.Errorf("must make no calls on a dead context: %v", r.calls)
+	}
+}
+
+func TestReplaceMASRefusesRunningApp(t *testing.T) {
+	r := &fakeRunner{} // pgrep succeeds -> app is running
+	e := Engine{Runner: r, Trash: func(string) error { t.Fatal("must not trash a running app"); return nil }}
+	res := e.ReplaceMAS(context.Background(), MASApp{App: "Things3.app", Path: "/Applications/Things3.app", Token: "things", Executable: "Things"})
+	if res.Outcome != Failed {
+		t.Fatalf("outcome = %v, want Failed (running)", res.Outcome)
+	}
+	if !strings.Contains(res.ErrText, "is running; quit it first") {
+		t.Errorf("refusal must be distinguishable in the message, got %q", res.ErrText)
+	}
+}
+
+func TestReplaceMASTrashesThenInstalls(t *testing.T) {
+	r := &fakeRunner{fail: map[string]error{"pgrep": errors.New("not running")}}
+	var trashed string
+	e := Engine{Runner: r, Trash: func(p string) error { trashed = p; return nil }}
+	res := e.ReplaceMAS(context.Background(), MASApp{App: "Things3.app", Path: "/Applications/Things3.app", Token: "things", Executable: "Things"})
+	if res.Outcome != Reinstalled {
+		t.Fatalf("outcome = %v (err=%v)", res.Outcome, res.Err)
+	}
+	if trashed != "/Applications/Things3.app" {
+		t.Errorf("trashed = %q", trashed)
+	}
+	wantInstall := "brew install --cask things"
+	found := false
+	for _, c := range r.calls {
+		if c == wantInstall {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missing %q in %v", wantInstall, r.calls)
+	}
+}
+
+func TestReplaceMASInstallFailureSurfaces(t *testing.T) {
+	r := &fakeRunner{fail: map[string]error{
+		"pgrep":        errors.New("not running"),
+		"brew install": errors.New("no such cask"),
+	}}
+	e := Engine{Runner: r, Trash: func(string) error { return nil }}
+	res := e.ReplaceMAS(context.Background(), MASApp{App: "X.app", Path: "/Applications/X.app", Token: "x", Executable: "X"})
+	if res.Outcome != Failed || res.Err == nil {
+		t.Fatalf("outcome = %v err=%v, want Failed", res.Outcome, res.Err)
+	}
+}
+
 func TestUpgradeEmptyExecutableTreatedAsNotRunning(t *testing.T) {
 	r := &fakeRunner{}
 	deferred, err := Engine{Runner: r}.UpgradeAdopted(context.Background(), []AdoptedApp{{Token: "slack"}})

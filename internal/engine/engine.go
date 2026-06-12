@@ -38,8 +38,9 @@ type Result struct {
 // tests can inject fakes.
 type Engine struct {
 	Runner brew.Runner
-	Force  bool // --force: escalate failed adopts to a forced reinstall
-	Yes    bool // --yes: don't defer upgrades of running apps
+	Force  bool                    // --force: escalate failed adopts to a forced reinstall
+	Yes    bool                    // --yes: don't defer upgrades of running apps
+	Trash  func(path string) error // moves a bundle to the Trash (never rm -rf)
 }
 
 // AdoptedApp identifies a successfully adopted app for the post-adopt
@@ -97,8 +98,47 @@ func (e Engine) UpgradeAdopted(ctx context.Context, apps []AdoptedApp) (deferred
 	return deferred, upgradeErr
 }
 
-// isRunning reports whether a process named executable exists.
+// MASApp identifies a Mac App Store app slated for cask replacement.
+type MASApp struct {
+	App        string
+	Path       string
+	Token      string
+	Executable string
+}
+
+// ReplaceMAS converts a Mac App Store app to its cask equivalent:
+// refuse if running, move the MAS bundle to the Trash (recoverable),
+// then install the cask. Caller is responsible for user confirmation.
+func (e Engine) ReplaceMAS(ctx context.Context, m MASApp) Result {
+	res := Result{App: m.App, Token: m.Token}
+	fail := func(err error) Result {
+		res.Outcome = Failed
+		res.OutcomeName = res.Outcome.String()
+		res.Err = err
+		res.ErrText = err.Error()
+		return res
+	}
+	if e.isRunning(ctx, m.Executable) {
+		return fail(fmt.Errorf("%s is running; quit it first", m.App))
+	}
+	if err := e.Trash(m.Path); err != nil {
+		return fail(fmt.Errorf("trash: %w", err))
+	}
+	if _, err := e.Runner.Run(ctx, "brew", "install", "--cask", m.Token); err != nil {
+		return fail(fmt.Errorf("install after trash (restore %s from Trash): %w", m.App, err))
+	}
+	res.Outcome = Reinstalled
+	res.OutcomeName = res.Outcome.String()
+	return res
+}
+
+// isRunning reports whether a process named executable exists. On a
+// cancelled context it reports true: callers defer or refuse rather
+// than acting (upgrading, trashing) on a dead context.
 func (e Engine) isRunning(ctx context.Context, executable string) bool {
+	if ctx.Err() != nil {
+		return true
+	}
 	if executable == "" {
 		return false
 	}
