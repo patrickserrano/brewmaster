@@ -1,0 +1,21 @@
+{
+  "formulae": [],
+  "casks": [
+    {
+      "token": "visual-studio-code",
+      "version": "1.100.0",
+      "artifacts": [
+        { "app": ["Visual Studio Code.app"] },
+        { "binary": ["something"] }
+      ]
+    },
+    {
+      "token": "raycast",
+      "version": "1.99.0",
+      "artifacts": [
+        { "app": ["Raycast.app"] },
+        { "zap": [{ "trash": ["~/Library/Caches/com.raycast.macos"] }] }
+      ]
+    }
+  ]
+}
