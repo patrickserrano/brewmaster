@@ -93,37 +93,55 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("is Homebrew installed? %w", err)
 			}
-			r := pipeline.BuildReport(apps, installed, caskindex.BuildIndex(casks))
-
+			// Deduplicate by bundle name before reporting: keep the first
+			// scanned app and warn, so a duplicate never silently rebinds
+			// a job to the wrong on-disk path.
 			byName := map[string]scan.App{}
+			deduped := apps[:0:0]
 			for _, a := range apps {
-				byName[a.Name] = a
-			}
-
-			// Worklist: adoptable apps, filtered to positional args if given.
-			var jobs []job
-			for _, e := range r.Adoptable {
-				if len(args) > 0 && !matchesArgs(e.App, args) {
+				if prev, dup := byName[a.Name]; dup {
+					fmt.Fprintf(errOut, "warning: duplicate app name %s at %s; keeping %s\n",
+						a.Name, a.Path, prev.Path)
 					continue
 				}
-				a := byName[e.App]
-				jobs = append(jobs, job{e.App, e.Token, a.Executable, a.Path})
+				byName[a.Name] = a
+				deduped = append(deduped, a)
 			}
-			// Explicit override: adopt --cask <token> "<App>" handles one
-			// ambiguous app.
+
+			r := pipeline.BuildReport(deduped, installed, caskindex.BuildIndex(casks))
+
+			var jobs, masJobs []job
+			var argErr error
 			if caskOverride != "" {
+				// Explicit override: adopt --cask <token> "<App>" handles
+				// exactly one adoptable or ambiguous app. It never targets
+				// managed, MAS, or system apps, and never plans MAS jobs.
 				if len(args) != 1 {
 					return fmt.Errorf("--cask requires exactly one app argument")
 				}
-				a, ok := byName[normalizeAppArg(args[0])]
-				if !ok {
-					return fmt.Errorf("app %q not found in scan", args[0])
+				name := normalizeAppArg(args[0])
+				if err := validateCaskOverride(name, r); err != nil {
+					return err
 				}
+				a := byName[name]
 				jobs = []job{{a.Name, caskOverride, a.Executable, a.Path}}
+			} else {
+				// Worklist: adoptable apps, filtered to positional args if given.
+				for _, e := range r.Adoptable {
+					if len(args) > 0 && !matchesArgs(e.App, args) {
+						continue
+					}
+					a := byName[e.App]
+					jobs = append(jobs, job{e.App, e.Token, a.Executable, a.Path})
+				}
+				masJobs = masWorklist(r.AppStore, byName, args)
+				argErr = reportUnmatchedArgs(errOut, args, r, includeMAS)
 			}
 
-			masJobs := masWorklist(r.AppStore, byName)
 			if len(jobs) == 0 && (!includeMAS || len(masJobs) == 0) {
+				if argErr != nil {
+					return argErr
+				}
 				fmt.Fprintln(out, "Nothing to adopt — run `brewmaster audit` to see why.")
 				return nil
 			}
@@ -137,7 +155,7 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 						fmt.Fprintf(out, "would replace MAS app: %s -> brew install --cask %s\n", j.app, j.token)
 					}
 				}
-				return nil
+				return argErr
 			}
 
 			eng := engine.Engine{Runner: deps.Runner, Force: force, Yes: yes, Trash: deps.Trash}
@@ -177,7 +195,9 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 
 			writeStateLog(results)
 			summarize(out, results)
-			return nil
+			// Unmatched positional args are non-fatal for the matched work
+			// above, but the run still exits non-zero so callers notice.
+			return argErr
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without executing")
@@ -191,17 +211,91 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 	return cmd
 }
 
-// masWorklist collects App Store apps with a confident cask match.
-func masWorklist(appStore []report.Entry, byName map[string]scan.App) []job {
+// masWorklist collects App Store apps with a confident cask match,
+// filtered to positional args when given.
+func masWorklist(appStore []report.Entry, byName map[string]scan.App, args []string) []job {
 	var jobs []job
 	for _, e := range appStore {
 		if e.Token == "" {
+			continue
+		}
+		if len(args) > 0 && !matchesArgs(e.App, args) {
 			continue
 		}
 		a := byName[e.App]
 		jobs = append(jobs, job{e.App, e.Token, a.Executable, a.Path})
 	}
 	return jobs
+}
+
+// validateCaskOverride restricts --cask to apps the user can sensibly
+// override: ambiguous matches and (re-tokened) adoptable apps. Managed,
+// MAS, and unknown apps are rejected with a pointed error.
+func validateCaskOverride(name string, r report.Report) error {
+	if hasEntry(r.Ambiguous, name) || hasEntry(r.Adoptable, name) {
+		return nil
+	}
+	switch {
+	case hasEntry(r.AppStore, name):
+		return fmt.Errorf("%q is a Mac App Store app; --cask cannot target it (use --include-mas)", name)
+	case hasEntry(r.Managed, name):
+		return fmt.Errorf("%q is already managed by Homebrew", name)
+	default:
+		return fmt.Errorf("%q was not found among adoptable or ambiguous apps", name)
+	}
+}
+
+// reportUnmatchedArgs prints a line to errOut for every positional arg
+// that selected no work, and returns a non-nil error when any did, so
+// the command exits non-zero instead of silently succeeding.
+func reportUnmatchedArgs(errOut io.Writer, args []string, r report.Report, includeMAS bool) error {
+	unmatched := 0
+	for _, raw := range args {
+		name := normalizeAppArg(raw)
+		switch {
+		case hasEntry(r.Adoptable, name):
+			// matched an adoptable job
+		case includeMAS && hasMASJob(r.AppStore, name):
+			// matched a MAS replacement job
+		case hasEntry(r.Ambiguous, name):
+			fmt.Fprintf(errOut, "%q is ambiguous; use: brewmaster adopt --cask <token> %q\n", name, raw)
+			unmatched++
+		case hasEntry(r.AppStore, name):
+			if includeMAS {
+				fmt.Fprintf(errOut, "no confident cask match for Mac App Store app %q\n", name)
+			} else {
+				fmt.Fprintf(errOut, "%q is a Mac App Store app; pass --include-mas to convert it\n", name)
+			}
+			unmatched++
+		default:
+			fmt.Fprintf(errOut, "no adoptable app matched: %s\n", raw)
+			unmatched++
+		}
+	}
+	if unmatched > 0 {
+		return fmt.Errorf("%d argument(s) matched no adoptable app", unmatched)
+	}
+	return nil
+}
+
+func hasEntry(entries []report.Entry, name string) bool {
+	for _, e := range entries {
+		if strings.EqualFold(e.App, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasMASJob reports whether an App Store entry named name has a
+// confident cask match (i.e. would appear in the MAS worklist).
+func hasMASJob(appStore []report.Entry, name string) bool {
+	for _, e := range appStore {
+		if strings.EqualFold(e.App, name) && e.Token != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func printResult(out io.Writer, res engine.Result) {
@@ -256,7 +350,8 @@ func writeStateLog(results []engine.Result) {
 	if err != nil {
 		return
 	}
-	name := fmt.Sprintf("adopt-%s.json", time.Now().Format("2006-01-02T15-04-05"))
+	// Nanosecond precision so two runs in the same second don't collide.
+	name := fmt.Sprintf("adopt-%s.json", time.Now().Format("2006-01-02T15-04-05.000000000"))
 	os.WriteFile(filepath.Join(dir, name), data, 0o644) //nolint:errcheck // best-effort log
 }
 
