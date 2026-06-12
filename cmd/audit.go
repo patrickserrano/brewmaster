@@ -47,6 +47,7 @@ func newAuditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			apps, _ = dedupeByName(apps, c.ErrOrStderr())
 			r := pipeline.BuildReport(apps, installed, caskindex.BuildIndex(casks))
 			if !verbose {
 				r.Managed = nil

@@ -3,6 +3,7 @@ package brew
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 )
 
@@ -37,29 +38,52 @@ func ParseInstalledCasks(data []byte) ([]InstalledCask, error) {
 }
 
 // appArtifacts extracts .app names from a cask artifacts array, whose
-// entries are heterogeneous objects like {"app": ["Foo.app"]}.
+// entries are heterogeneous objects like {"app": ["Foo.app"]}. Renamed
+// apps also surface the install destination as an entry-level "target"
+// full path ({"app": ["Foo.app"], "target": "/Applications/Bar.app"});
+// both names are collected, deduplicated within the cask.
 func appArtifacts(artifacts []json.RawMessage) []string {
 	var apps []string
+	seen := map[string]bool{}
+	add := func(name string) {
+		if !hasSuffixFold(name, ".app") {
+			return
+		}
+		k := strings.ToLower(name)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		apps = append(apps, name)
+	}
 	for _, raw := range artifacts {
 		var entry map[string]json.RawMessage
 		if json.Unmarshal(raw, &entry) != nil {
 			continue
 		}
-		appRaw, ok := entry["app"]
-		if !ok {
-			continue
+		if appRaw, ok := entry["app"]; ok {
+			var vals []any
+			if json.Unmarshal(appRaw, &vals) == nil {
+				for _, v := range vals {
+					if s, ok := v.(string); ok {
+						add(s)
+					}
+				}
+			}
 		}
-		var vals []any
-		if json.Unmarshal(appRaw, &vals) != nil {
-			continue
-		}
-		for _, v := range vals {
-			if s, ok := v.(string); ok && strings.HasSuffix(s, ".app") {
-				apps = append(apps, s)
+		if tgtRaw, ok := entry["target"]; ok {
+			var tgt string
+			if json.Unmarshal(tgtRaw, &tgt) == nil && tgt != "" {
+				add(filepath.Base(tgt))
 			}
 		}
 	}
 	return apps
+}
+
+// hasSuffixFold reports whether s ends with suffix, case-insensitively.
+func hasSuffixFold(s, suffix string) bool {
+	return len(s) >= len(suffix) && strings.EqualFold(s[len(s)-len(suffix):], suffix)
 }
 
 func InstalledCasks(ctx context.Context, r Runner) ([]InstalledCask, error) {

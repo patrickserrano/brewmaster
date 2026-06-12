@@ -47,7 +47,7 @@ func (r Report) RenderTable(w io.Writer, verbose bool) {
 	section(w, "AMBIGUOUS (use: brewmaster adopt --cask <token> \"<App>\")", r.Ambiguous,
 		func(e Entry) string { return strings.Join(e.Candidates, ", ") })
 	section(w, "APP STORE (untouched; use --include-mas to convert)", r.AppStore,
-		func(Entry) string { return "" })
+		func(e Entry) string { return e.Token })
 	section(w, "UNMATCHED (no cask available)", r.Unmatched, func(Entry) string { return "" })
 }
 

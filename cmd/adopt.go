@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,20 +94,7 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("is Homebrew installed? %w", err)
 			}
-			// Deduplicate by bundle name before reporting: keep the first
-			// scanned app and warn, so a duplicate never silently rebinds
-			// a job to the wrong on-disk path.
-			byName := map[string]scan.App{}
-			deduped := apps[:0:0]
-			for _, a := range apps {
-				if prev, dup := byName[a.Name]; dup {
-					fmt.Fprintf(errOut, "warning: duplicate app name %s at %s; keeping %s\n",
-						a.Name, a.Path, prev.Path)
-					continue
-				}
-				byName[a.Name] = a
-				deduped = append(deduped, a)
-			}
+			deduped, byName := dedupeByName(apps, errOut)
 
 			r := pipeline.BuildReport(deduped, installed, caskindex.BuildIndex(casks))
 
@@ -211,6 +199,25 @@ func newAdoptCmd(deps AdoptDeps) *cobra.Command {
 	return cmd
 }
 
+// dedupeByName deduplicates scanned apps by bundle name before reporting:
+// the first scanned app wins and later duplicates warn, so a duplicate
+// never silently rebinds work to the wrong on-disk path. It returns the
+// deduplicated list and a name -> app lookup.
+func dedupeByName(apps []scan.App, errOut io.Writer) ([]scan.App, map[string]scan.App) {
+	byName := map[string]scan.App{}
+	deduped := apps[:0:0]
+	for _, a := range apps {
+		if prev, dup := byName[a.Name]; dup {
+			fmt.Fprintf(errOut, "warning: duplicate app name %s at %s; keeping %s\n",
+				a.Name, a.Path, prev.Path)
+			continue
+		}
+		byName[a.Name] = a
+		deduped = append(deduped, a)
+	}
+	return deduped, byName
+}
+
 // masWorklist collects App Store apps with a confident cask match,
 // filtered to positional args when given.
 func masWorklist(appStore []report.Entry, byName map[string]scan.App, args []string) []job {
@@ -245,9 +252,13 @@ func validateCaskOverride(name string, r report.Report) error {
 	}
 }
 
+// ErrUnmatchedArgs marks runs where positional args selected no work.
+// main maps it to exit 1: drift-like — nothing broke, work didn't apply.
+var ErrUnmatchedArgs = errors.New("matched no adoptable app")
+
 // reportUnmatchedArgs prints a line to errOut for every positional arg
-// that selected no work, and returns a non-nil error when any did, so
-// the command exits non-zero instead of silently succeeding.
+// that selected no work, and returns an error wrapping ErrUnmatchedArgs
+// when any did, so the command exits 1 instead of silently succeeding.
 func reportUnmatchedArgs(errOut io.Writer, args []string, r report.Report, includeMAS bool) error {
 	unmatched := 0
 	for _, raw := range args {
@@ -273,7 +284,7 @@ func reportUnmatchedArgs(errOut io.Writer, args []string, r report.Report, inclu
 		}
 	}
 	if unmatched > 0 {
-		return fmt.Errorf("%d argument(s) matched no adoptable app", unmatched)
+		return fmt.Errorf("%d argument(s) %w", unmatched, ErrUnmatchedArgs)
 	}
 	return nil
 }

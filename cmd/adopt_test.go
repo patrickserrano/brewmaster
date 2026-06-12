@@ -281,6 +281,9 @@ func TestUnmatchedPositionalArgErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("unmatched arg must produce an error; stdout:\n%s", out)
 	}
+	if !errors.Is(err, ErrUnmatchedArgs) {
+		t.Errorf("error must wrap ErrUnmatchedArgs (exit 1, not 2): %v", err)
+	}
 	if !strings.Contains(stderr, "no adoptable app matched: Slak") {
 		t.Errorf("stderr should name the unmatched arg:\n%s", stderr)
 	}
@@ -307,6 +310,9 @@ func TestUnmatchedArgIsNonFatalForMatchedWork(t *testing.T) {
 	out, stderr, err := runAdopt(t, mixedDeps(r, nil), "", "Slack", "Slak")
 	if err == nil {
 		t.Fatal("expected non-zero exit when any arg is unmatched")
+	}
+	if !errors.Is(err, ErrUnmatchedArgs) {
+		t.Errorf("error must wrap ErrUnmatchedArgs (exit 1, not 2): %v", err)
 	}
 	if !strings.Contains(stderr, "no adoptable app matched: Slak") {
 		t.Errorf("stderr should name the unmatched arg:\n%s", stderr)
@@ -373,6 +379,27 @@ func TestStateLogFilenamesDoNotCollide(t *testing.T) {
 	}
 	if len(logs) != 2 {
 		t.Errorf("expected 2 distinct state logs, got %d", len(logs))
+	}
+}
+
+// dedupeByName keeps the first scanned app per bundle name and warns
+// about every later duplicate.
+func TestDedupeByName(t *testing.T) {
+	apps := []scan.App{
+		{Name: "Slack.app", Path: "/Applications/Slack.app"},
+		{Name: "Slack.app", Path: "/Users/me/Applications/Slack.app"},
+		{Name: "Other.app", Path: "/Applications/Other.app"},
+	}
+	var stderr bytes.Buffer
+	deduped, byName := dedupeByName(apps, &stderr)
+	if len(deduped) != 2 || deduped[0].Name != "Slack.app" || deduped[1].Name != "Other.app" {
+		t.Errorf("deduped = %+v", deduped)
+	}
+	if byName["Slack.app"].Path != "/Applications/Slack.app" {
+		t.Errorf("first scanned path must win: %+v", byName["Slack.app"])
+	}
+	if !strings.Contains(stderr.String(), "duplicate app name Slack.app") {
+		t.Errorf("expected duplicate warning:\n%s", stderr.String())
 	}
 }
 

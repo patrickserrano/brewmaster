@@ -16,6 +16,13 @@
         { "app": ["Raycast.app"] },
         { "zap": [{ "trash": ["~/Library/Caches/com.raycast.macos"] }] }
       ]
+    },
+    {
+      "token": "renamed",
+      "version": "2.0.0",
+      "artifacts": [
+        { "app": ["Foo.app"], "target": "/Applications/Foo Renamed.app" }
+      ]
     }
   ]
 }

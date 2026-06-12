@@ -3,6 +3,18 @@ on:
   push: { branches: [main] }
   pull_request:
 jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+      # Action v8 is the line that supports golangci-lint v2; the pin
+      # matches the version developers run locally (.golangci.yml is in
+      # v2 config format).
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
   test:
     runs-on: macos-latest
     steps:

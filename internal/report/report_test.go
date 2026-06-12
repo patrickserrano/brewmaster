@@ -12,7 +12,7 @@ func sample() Report {
 		ManagedCount: 12,
 		Adoptable:    []Entry{{App: "Slack.app", Token: "slack", Version: "4.39.0"}},
 		Ambiguous:    []Entry{{App: "Thing.app", Candidates: []string{"thing", "thing@beta"}}},
-		AppStore:     []Entry{{App: "Things3.app"}},
+		AppStore:     []Entry{{App: "Things3.app", Token: "things"}},
 		Unmatched:    []Entry{{App: "Custom.app"}},
 	}
 }
@@ -25,6 +25,21 @@ func TestRenderTable(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("table missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// The APP STORE section shows the matched cask token so users can see
+// what --include-mas would convert.
+func TestRenderTableAppStoreShowsToken(t *testing.T) {
+	var buf bytes.Buffer
+	sample().RenderTable(&buf, false)
+	out := buf.String()
+	masSection := out[strings.Index(out, "APP STORE"):]
+	if i := strings.Index(masSection, "\nUNMATCHED"); i >= 0 {
+		masSection = masSection[:i]
+	}
+	if !strings.Contains(masSection, "things") {
+		t.Errorf("APP STORE section missing matched token %q:\n%s", "things", out)
 	}
 }
 

@@ -50,7 +50,7 @@ func download(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("catalog fetch: %s", resp.Status)
 	}
@@ -67,13 +67,13 @@ func writeCache(cachePath string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // no-op after successful rename
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after successful rename
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the write error is the one worth reporting
 		return err
 	}
 	if err := tmp.Chmod(0o644); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the chmod error is the one worth reporting
 		return err
 	}
 	if err := tmp.Close(); err != nil {

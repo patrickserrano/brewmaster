@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # CLI output to stdout/stderr is best-effort by design; a failed
+      # print must never abort an audit or adoption run.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*text/tabwriter.Writer).Flush
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
