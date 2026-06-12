@@ -63,6 +63,7 @@ func newAuditCmd() *cobra.Command {
 				}
 			}
 			if r.HasAdoptable() {
+				c.SilenceErrors = true // drift is reported above, not an error
 				return ErrAdoptableFound
 			}
 			return nil
