@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func ScanDirs(dirs []string) ([]App, error) {
 			continue
 		}
 		for _, e := range entries {
-			if !e.IsDir() || !strings.HasSuffix(e.Name(), ".app") {
+			if !strings.HasSuffix(e.Name(), ".app") || !isDirEntry(dir, e) {
 				continue
 			}
 			app, err := ReadApp(filepath.Join(dir, e.Name()))
@@ -36,4 +37,18 @@ func ScanDirs(dirs []string) ([]App, error) {
 		}
 	}
 	return apps, nil
+}
+
+// isDirEntry reports whether e is a directory, following symlinks: os.ReadDir
+// uses lstat semantics, so a symlinked .app bundle has IsDir() == false and
+// must be resolved with os.Stat.
+func isDirEntry(dir string, e fs.DirEntry) bool {
+	if e.IsDir() {
+		return true
+	}
+	if e.Type()&fs.ModeSymlink == 0 {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, e.Name()))
+	return err == nil && info.IsDir()
 }

@@ -62,13 +62,35 @@ func TestScanDirsFindsAppsOneLevelDeep(t *testing.T) {
 	nested := filepath.Join(dir, "SomeFolder")
 	os.MkdirAll(nested, 0o755)
 	writeApp(t, nested, "Hidden.app", "com.x.hidden", "1.0", false)
+	// A symlinked .app bundle must be included.
+	other := t.TempDir()
+	real := writeApp(t, other, "Real.app", "com.x.real", "2.0", false)
+	if err := os.Symlink(real, filepath.Join(dir, "Linked.app")); err != nil {
+		t.Fatal(err)
+	}
+	// An unreadable bundle (no Contents/Info.plist) must be skipped.
+	if err := os.MkdirAll(filepath.Join(dir, "Broken.app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	apps, err := ScanDirs([]string{dir, filepath.Join(dir, "does-not-exist")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(apps) != 2 {
-		t.Fatalf("want 2 apps, got %d: %+v", len(apps), apps)
+	if len(apps) != 3 {
+		t.Fatalf("want 3 apps, got %d: %+v", len(apps), apps)
+	}
+	var foundLinked bool
+	for _, a := range apps {
+		if a.Name == "Linked.app" || a.BundleID == "com.x.real" {
+			foundLinked = true
+		}
+		if a.Name == "Broken.app" {
+			t.Errorf("Broken.app should have been skipped: %+v", a)
+		}
+	}
+	if !foundLinked {
+		t.Errorf("symlinked Linked.app not found in %+v", apps)
 	}
 }
 
