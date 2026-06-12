@@ -93,9 +93,11 @@ reads. Audit completes well under 10s for ~200 apps.
 - **High (auto-adoptable):** on-disk bundle name exactly matches one cask's app
   artifact, AND (bundle ID agrees OR no other cask claims that artifact name).
 - **Ambiguous:** multiple casks declare the same artifact (e.g. `@beta`
-  variants) or only fuzzy display-name match. Tie-breaker before demotion: if
-  the app's Info.plist version matches exactly one candidate's cask version,
-  that candidate wins at High.
+  variants) or only fuzzy display-name match. Tie-breaker before demotion: it
+  applies only among candidates whose declared bundle IDs don't disagree with
+  the app's; if the app's Info.plist version matches exactly one such
+  candidate's cask version — compared ignoring build metadata after a comma
+  (`4.39.0,123` matches `4.39.0`) — that candidate wins at High.
 - **None:** → Unmatched.
 
 The matcher is a pure function `(app metadata, index) → match result` —
