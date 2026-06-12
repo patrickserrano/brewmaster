@@ -28,6 +28,35 @@ func TestRenderTable(t *testing.T) {
 	}
 }
 
+func TestRenderTableVerbose(t *testing.T) {
+	r := sample()
+	r.Managed = []Entry{{App: "Raycast.app", Token: "raycast", Version: "1.80.0"}}
+	var buf bytes.Buffer
+	r.RenderTable(&buf, true)
+	out := buf.String()
+	for _, want := range []string{"MANAGED", "Raycast.app", "raycast"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("verbose table missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderJSONEmptyBucketsAreArrays(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (Report{}).RenderJSON(&buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{`"adoptable": []`, `"ambiguous": []`, `"app_store": []`, `"unmatched": []`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JSON missing %s:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "null") {
+		t.Errorf("JSON contains null bucket:\n%s", out)
+	}
+}
+
 func TestRenderJSON(t *testing.T) {
 	var buf bytes.Buffer
 	if err := sample().RenderJSON(&buf); err != nil {

@@ -27,6 +27,12 @@ type Report struct {
 func (r Report) HasAdoptable() bool { return len(r.Adoptable) > 0 }
 
 func (r Report) RenderJSON(w io.Writer) error {
+	// Normalize nil buckets so JSON emits [] rather than null.
+	for _, b := range []*[]Entry{&r.Adoptable, &r.Ambiguous, &r.AppStore, &r.Unmatched} {
+		if *b == nil {
+			*b = []Entry{}
+		}
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(r)
