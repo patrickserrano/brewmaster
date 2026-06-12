@@ -10,5 +10,6 @@ func NewRootCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 	root.AddCommand(newAuditCmd())
+	root.AddCommand(newAdoptCmd(AdoptDeps{}))
 	return root
 }
