@@ -1,0 +1,32 @@
+[
+  {
+    "token": "visual-studio-code",
+    "name": ["Microsoft Visual Studio Code", "VS Code"],
+    "version": "1.100.0",
+    "artifacts": [
+      { "app": ["Visual Studio Code.app"] },
+      { "uninstall": [{ "quit": "com.microsoft.VSCode" }] }
+    ]
+  },
+  {
+    "token": "slack",
+    "name": ["Slack"],
+    "version": "4.39.0",
+    "artifacts": [{ "app": ["Slack.app"] }]
+  },
+  {
+    "token": "slack@beta",
+    "name": ["Slack Beta"],
+    "version": "4.40.0-beta",
+    "artifacts": [{ "app": ["Slack.app"] }]
+  },
+  {
+    "token": "firefox",
+    "name": ["Mozilla Firefox"],
+    "version": "127.0",
+    "artifacts": [
+      { "app": ["Firefox.app"] },
+      { "uninstall": [{ "quit": ["org.mozilla.firefox"] }] }
+    ]
+  }
+]
