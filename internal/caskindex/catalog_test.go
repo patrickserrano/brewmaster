@@ -49,3 +49,38 @@ func TestIndexLookups(t *testing.T) {
 		t.Errorf("ByBundleID = %+v", got)
 	}
 }
+
+func TestRenamedAppTargets(t *testing.T) {
+	idx := loadIndex(t)
+	// The disk-image name and the renamed install target should both resolve.
+	if got := idx.ByArtifact("Thorium Browser.app"); len(got) != 1 || got[0].Token != "thorium" {
+		t.Errorf("ByArtifact(Thorium Browser.app) = %+v, want thorium cask", got)
+	}
+	if got := idx.ByArtifact("Thorium.app"); len(got) != 1 || got[0].Token != "thorium" {
+		t.Errorf("ByArtifact(Thorium.app) = %+v, want thorium cask", got)
+	}
+	// Targets duplicated between the app array object and the entry-level
+	// "target" key must be deduped within the cask.
+	data, err := os.ReadFile("testdata/cask.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	casks, err := ParseCatalog(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range casks {
+		if c.Token != "thorium" {
+			continue
+		}
+		want := []string{"Thorium.app", "Thorium Browser.app"}
+		if len(c.Apps) != len(want) {
+			t.Fatalf("thorium Apps = %v, want %v", c.Apps, want)
+		}
+		for i, app := range want {
+			if c.Apps[i] != app {
+				t.Errorf("thorium Apps[%d] = %q, want %q", i, c.Apps[i], app)
+			}
+		}
+	}
+}

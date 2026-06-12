@@ -4,6 +4,7 @@ package caskindex
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 )
 
@@ -33,13 +34,35 @@ func ParseCatalog(data []byte) ([]Cask, error) {
 	casks := make([]Cask, 0, len(raws))
 	for _, r := range raws {
 		c := Cask{Token: r.Token, Names: r.Name, Version: r.Version}
+		seenApps := map[string]bool{}
+		addApp := func(name string) {
+			if !hasSuffixFold(name, ".app") {
+				return
+			}
+			k := strings.ToLower(name)
+			if seenApps[k] {
+				return
+			}
+			seenApps[k] = true
+			c.Apps = append(c.Apps, name)
+		}
 		for _, art := range r.Artifacts {
 			var entry map[string]json.RawMessage
 			if json.Unmarshal(art, &entry) != nil {
 				continue
 			}
 			if appRaw, ok := entry["app"]; ok {
-				c.Apps = append(c.Apps, stringsFromArray(appRaw, ".app")...)
+				for _, name := range appNames(appRaw) {
+					addApp(name)
+				}
+			}
+			// Renamed apps also surface the install destination as an
+			// entry-level "target" full path.
+			if tgtRaw, ok := entry["target"]; ok {
+				var tgt string
+				if json.Unmarshal(tgtRaw, &tgt) == nil && tgt != "" {
+					addApp(filepath.Base(tgt))
+				}
 			}
 			for _, key := range []string{"uninstall", "zap"} {
 				if raw, ok := entry[key]; ok {
@@ -52,20 +75,32 @@ func ParseCatalog(data []byte) ([]Cask, error) {
 	return casks, nil
 }
 
-// stringsFromArray decodes a JSON array and keeps string elements with the
-// given suffix. Artifact arrays can mix strings with option objects.
-func stringsFromArray(raw json.RawMessage, suffix string) []string {
+// appNames decodes an "app" artifact array. Elements are either plain
+// strings (the name inside the disk image) or option objects whose
+// "target" is the renamed name installed into /Applications. Both names
+// are returned: an already-installed app may be on disk under either.
+func appNames(raw json.RawMessage) []string {
 	var vals []any
 	if json.Unmarshal(raw, &vals) != nil {
 		return nil
 	}
 	var out []string
 	for _, v := range vals {
-		if s, ok := v.(string); ok && strings.HasSuffix(s, suffix) {
-			out = append(out, s)
+		switch e := v.(type) {
+		case string:
+			out = append(out, e)
+		case map[string]any:
+			if tgt, ok := e["target"].(string); ok {
+				out = append(out, tgt)
+			}
 		}
 	}
 	return out
+}
+
+// hasSuffixFold reports whether s ends with suffix, case-insensitively.
+func hasSuffixFold(s, suffix string) bool {
+	return len(s) >= len(suffix) && strings.EqualFold(s[len(s)-len(suffix):], suffix)
 }
 
 // quitIDs extracts quit: bundle IDs; the value may be a string or array.

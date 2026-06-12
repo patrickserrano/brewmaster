@@ -28,5 +28,16 @@
       { "app": ["Firefox.app"] },
       { "uninstall": [{ "quit": ["org.mozilla.firefox"] }] }
     ]
+  },
+  {
+    "token": "thorium",
+    "name": ["Thorium"],
+    "version": "130.0",
+    "artifacts": [
+      {
+        "app": ["Thorium.app", { "target": "Thorium Browser.app" }],
+        "target": "/Applications/Thorium Browser.app"
+      }
+    ]
   }
 ]
