@@ -1,0 +1,17 @@
+version: 2
+builds:
+  - main: .
+    binary: brewmaster
+    goos: [darwin]
+    goarch: [arm64, amd64]
+    env: [CGO_ENABLED=0]
+brews:
+  - repository:
+      owner: patrickserrano
+      name: homebrew-tap
+    homepage: https://github.com/patrickserrano/brewmaster
+    description: "Audit installed macOS apps and adopt them into Homebrew"
+release:
+  github:
+    owner: patrickserrano
+    name: brewmaster

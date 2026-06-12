@@ -1,0 +1,10 @@
+# Built binary (go build -o brewmaster .)
+/brewmaster
+
+# GoReleaser output
+dist/
+
+# Scratch/test artifacts
+tmp/
+*.test
+coverage.out
