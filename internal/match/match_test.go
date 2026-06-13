@@ -21,6 +21,12 @@ func idx() caskindex.Index {
 			QuitIDs: []string{"com.real.bar"}},
 		{Token: "bar@beta", Version: "2.1.0-beta", Apps: []string{"Bar.app"},
 			QuitIDs: []string{"com.real.bar"}},
+		// Two casks claim Qux.app, but only "qux" lists the app's bundle ID:
+		// the bundle-ID tie-break resolves the collision to High.
+		{Token: "qux", Version: "1.0.0", Apps: []string{"Qux.app"},
+			QuitIDs: []string{"com.real.qux"}},
+		{Token: "qux-imposter", Version: "1.0.0", Apps: []string{"Qux.app"},
+			QuitIDs: []string{"com.other.qux"}},
 	})
 }
 
@@ -53,6 +59,9 @@ func TestMatchApp(t *testing.T) {
 		{"variant collision where all candidates' quit ids disagree is Ambiguous despite version match",
 			scan.App{Name: "Bar.app", BundleID: "com.evil.imposter", Version: "2.0.0"},
 			Ambiguous, "", []string{"bar", "bar@beta"}},
+		{"variant collision resolved by bundle-id tie-break is High",
+			scan.App{Name: "Qux.app", BundleID: "com.real.qux", Version: "1.0.0"},
+			High, "qux", nil},
 		{"bundle-id-only match (renamed bundle) is Ambiguous",
 			scan.App{Name: "VSCode Renamed.app", BundleID: "com.microsoft.VSCode"},
 			Ambiguous, "", []string{"visual-studio-code"}},
