@@ -1,13 +1,33 @@
 version: 2
 
 builds:
-  - main: .
+  - id: brewmaster
+    main: .
     binary: brewmaster
     goos: [darwin]
     goarch: [arm64, amd64]
     env: [CGO_ENABLED=0]
     ldflags:
       - -s -w
+
+# Sign + notarize the macOS binaries with an Apple Developer ID (via quill, no
+# Xcode needed). Auto-enabled only when the signing cert is present, so local
+# snapshot builds still work without secrets. Real releases run in CI with the
+# secrets set, producing notarized binaries that pass Gatekeeper natively — so
+# no quarantine-stripping hook is needed in the cask.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [brewmaster]
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
 
 archives:
   - formats: [tar.gz]
@@ -18,22 +38,13 @@ homebrew_casks:
     repository:
       owner: patrickserrano
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/patrickserrano/brewmaster
     description: "Audit installed macOS apps and adopt them into Homebrew"
     license: MIT
     commit_author:
       name: goreleaser-bot
       email: noreply@patrickserrano.com
-    # The binary is unsigned, so macOS Gatekeeper quarantines it on download.
-    # Strip the quarantine attribute on install so `brewmaster` runs immediately.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr",
-              args: ["-dr", "com.apple.quarantine", "#{staged_path}/brewmaster"],
-              sudo: false
-          end
 
 release:
   github:
