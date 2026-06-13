@@ -9,7 +9,7 @@ func NewRootCmd() *cobra.Command {
 		Long:         "brewmaster audits installed macOS apps and adopts them into Homebrew.",
 		SilenceUsage: true,
 	}
-	root.AddCommand(newAuditCmd())
+	root.AddCommand(newAuditCmd(AuditDeps{}))
 	root.AddCommand(newAdoptCmd(AdoptDeps{}))
 	return root
 }
