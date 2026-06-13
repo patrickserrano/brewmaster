@@ -10,13 +10,9 @@ require Go at runtime.
 brew install patrickserrano/tap/brewmaster
 ```
 
-/// admonition | Tap availability
-    type: note
-
-The Homebrew tap and release artifacts are published when a version is tagged.
-If the command above reports that the formula can't be found, a release hasn't
-been cut yet — use one of the developer install methods below in the meantime.
-///
+This installs a notarization-free, prebuilt binary as a Homebrew cask; the
+cask strips the macOS quarantine attribute on install, so `brewmaster` runs
+immediately. To upgrade later: `brew upgrade --cask brewmaster`.
 
 ## go install
 
