@@ -1,6 +1,15 @@
 # brewmaster
 
+[![CI](https://github.com/patrickserrano/brewmaster/actions/workflows/ci.yml/badge.svg)](https://github.com/patrickserrano/brewmaster/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/patrickserrano/brewmaster)](https://goreportcard.com/report/github.com/patrickserrano/brewmaster)
+[![Latest release](https://img.shields.io/github/v/release/patrickserrano/brewmaster)](https://github.com/patrickserrano/brewmaster/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/patrickserrano/brewmaster)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#install)
+
 Audit the apps installed on your Mac and adopt the unmanaged ones into Homebrew.
+
+**📖 Full documentation: [patrickserrano.github.io/brewmaster](https://patrickserrano.github.io/brewmaster/)**
 
 Most Macs accumulate apps installed by hand — downloaded DMGs, vendor installers,
 auto-updaters. Homebrew can manage those apps (updates, uninstalls, `brew bundle`
@@ -14,90 +23,36 @@ that qualifies and runs the adoption for you.
 brew install patrickserrano/tap/brewmaster
 ```
 
-## Commands
+## Usage
 
-### `brewmaster audit`
-
-Scans `/Applications` (and `~/Applications`), classifies every app, and matches
-unmanaged apps against the Homebrew cask catalog:
-
-```
-26 app(s) already managed by Homebrew
-
-ADOPTABLE
-  Alcove.app                1.7.2                  alcove
-  ChatGPT.app               1.2026.104             chatgpt
-  Claude.app                1.9255.0               claude
-  Docker.app                4.76.0                 docker-desktop
-  Figma.app                 116.5.18               figma
-  HandBrake.app             1.10.2                 handbrake-app
-  ...
-
-AMBIGUOUS (use: brewmaster adopt --cask <token> "<App>")
-  Kaleidoscope.app     6.3          kaleidoscope, kaleidoscope@2, kaleidoscope@3
-  iTerm.app            3.6.1        iterm2, iterm2@beta, iterm2@nightly
-
-APP STORE (untouched; use --include-mas to convert)
-  Amphetamine.app            5.3.2
-  Ivory.app                  2.5.2
-  ...
+```sh
+brewmaster audit            # read-only report; changes nothing
+brewmaster adopt --dry-run  # preview the adoption plan
+brewmaster adopt            # adopt every high-confidence match
 ```
 
-Use `--verbose` to also include the Homebrew-managed apps, and `--json` for
-machine-readable output (the same report as JSON; combine with `--verbose`
-to include managed apps).
+`audit` classifies every app into five buckets (managed / adoptable / ambiguous
+/ app-store / unmatched) and exits non-zero when drift exists, so it doubles as a
+drift detector for cron and CI. `adopt` runs `brew install --cask --adopt` on
+each adoptable app and upgrades them to converge with Homebrew's records.
 
-### `brewmaster adopt [apps...]`
+Mac App Store apps are never touched without the explicit `--include-mas` flag
+and a typed confirmation, since converting them loses App Store receipts and
+possibly in-app purchases (app data in `~/Library` survives).
 
-Adopts every adoptable app (or just the ones named as arguments) via
-`brew install --cask --adopt`, then upgrades them so they're current:
+See the [documentation site](https://patrickserrano.github.io/brewmaster/) for
+the full command reference, flags, exit codes, JSON output, the state log, and
+how matching works:
 
-```
-$ brewmaster adopt --dry-run
-would run: brew install --cask --adopt alcove  # Alcove.app
-would run: brew install --cask --adopt chatgpt  # ChatGPT.app
-would run: brew install --cask --adopt docker-desktop  # Docker.app
-would run: brew install --cask --adopt figma  # Figma.app
-...
-```
+- [audit](https://patrickserrano.github.io/brewmaster/audit/) — buckets, JSON, drift detection
+- [adopt](https://patrickserrano.github.io/brewmaster/adopt/) — workflow, overrides, state log
+- [Mac App Store](https://patrickserrano.github.io/brewmaster/mac-app-store/) — what `--include-mas` does
+- [How it works](https://patrickserrano.github.io/brewmaster/how-it-works/) — detection and matching
 
-| Flag | Effect |
-| --- | --- |
-| `--dry-run` | Print planned actions without executing anything |
-| `--include-mas` | Also replace Mac App Store apps with their cask versions (see warning below) |
-| `--force` | Reinstall when adopt fails on artifact mismatch (overwrites the app bundle) |
-| `--yes` | Skip confirmations; upgrade apps even if they appear to be running |
-| `--cask <token>` | Explicit cask token for a single (ambiguous) app, e.g. `brewmaster adopt --cask iterm2 iTerm` |
+## Contributing & design
 
-## Mac App Store apps
-
-Apps installed from the Mac App Store are never touched by default. With
-`--include-mas`, brewmaster replaces a MAS app with the cask version:
-the old bundle goes to the Trash and the cask is installed fresh. You will
-**lose App Store receipts, App Store auto-updates, and possibly in-app
-purchases**; app data in `~/Library` is preserved. brewmaster asks for explicit
-confirmation before doing this (unless `--yes` is passed) and refuses to
-replace an app that is currently running.
-
-## Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| 0 | Clean — nothing adoptable (audit), or all requested work done (adopt) |
-| 1 | Adoptable apps found (audit), or positional args matched no adoptable app (adopt) |
-| 2 | Error (brew missing, catalog fetch failed, etc.) |
-
-This makes `brewmaster audit` usable as a drift check in scripts and cron.
-
-## State log
-
-Every non-dry-run `adopt` writes a JSON record of its results to
-`~/.local/state/brewmaster/adopt-<timestamp>.json` (best-effort; logging
-failures never block adoption).
-
-## Design
-
-See [docs/plans/2026-06-11-brewmaster-design.md](docs/plans/2026-06-11-brewmaster-design.md)
-for the full design doc, and
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, and
+[docs/plans/2026-06-11-brewmaster-design.md](docs/plans/2026-06-11-brewmaster-design.md)
+for the full design doc and
 [docs/plans/2026-06-11-brewmaster-implementation.md](docs/plans/2026-06-11-brewmaster-implementation.md)
 for the implementation plan.

@@ -1,0 +1,44 @@
+site_name: brewmaster
+site_description: Audit installed macOS apps and adopt the unmanaged ones into Homebrew.
+site_url: https://patrickserrano.github.io/brewmaster/
+site_author: Patrick Serrano
+
+repo_url: https://github.com/patrickserrano/brewmaster
+repo_name: patrickserrano/brewmaster
+
+# Source the site from www/ so docs/plans/ (the design contract) is never published.
+docs_dir: www
+
+theme:
+  name: shadcn
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Commands:
+      - audit: audit.md
+      - adopt: adopt.md
+  - Mac App Store: mac-app-store.md
+  - How it works: how-it-works.md
+  - FAQ: faq.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - codehilite:
+      guess_lang: false
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.blocks.admonition
+  - pymdownx.blocks.details
+  - pymdownx.blocks.tab:
+      alternate_style: true
