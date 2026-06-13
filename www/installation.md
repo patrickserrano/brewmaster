@@ -10,9 +10,10 @@ require Go at runtime.
 brew install patrickserrano/tap/brewmaster
 ```
 
-This installs a notarization-free, prebuilt binary as a Homebrew cask; the
-cask strips the macOS quarantine attribute on install, so `brewmaster` runs
-immediately. To upgrade later: `brew upgrade --cask brewmaster`.
+This installs a prebuilt binary as a Homebrew cask. The binary is signed with
+an Apple Developer ID and notarized by Apple, so it passes Gatekeeper and runs
+immediately — no quarantine workarounds needed. To upgrade later:
+`brew upgrade --cask brewmaster`.
 
 ## go install
 
