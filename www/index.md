@@ -1,6 +1,8 @@
-# brewmaster
-
-**Audit the apps installed on your Mac and adopt the unmanaged ones into Homebrew.**
+---
+title: brewmaster
+summary: Audit the apps installed on your Mac and adopt the unmanaged ones into Homebrew.
+description: brewmaster finds the macOS apps you installed by hand and adopts them into Homebrew — without reinstalling or losing data. Mac App Store apps stay untouched unless you opt in.
+---
 
 Most Macs accumulate apps installed by hand — downloaded DMGs, vendor installers,
 auto-updaters. Homebrew can manage those apps (updates, uninstalls, `brew bundle`

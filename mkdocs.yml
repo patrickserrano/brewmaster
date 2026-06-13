@@ -11,6 +11,10 @@ docs_dir: www
 
 theme:
   name: shadcn
+  icon: assets/logo.svg
+  favicon: assets/logo.svg
+  show_title: true
+  show_stargazers: true
 
 nav:
   - Home: index.md

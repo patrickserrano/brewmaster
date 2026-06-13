@@ -1,13 +1,15 @@
-# Built binary (go build -o brewmaster .)
-/brewmaster
 
-# GoReleaser output
-dist/
-
-# MkDocs build output
-/site/
-
-# Scratch/test artifacts
-tmp/
+.playwright-mcp/
 *.test
+/brewmaster
+/site/
+# Built binary (go build -o brewmaster .)
+# GoReleaser output
+# MkDocs build output
+# Scratch/test artifacts
 coverage.out
+dist/
+home-desktop.png
+home-narrow.png
+site/
+tmp/
