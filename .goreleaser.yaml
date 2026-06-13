@@ -1,17 +1,50 @@
 version: 2
+
 builds:
   - main: .
     binary: brewmaster
     goos: [darwin]
     goarch: [arm64, amd64]
     env: [CGO_ENABLED=0]
-brews:
-  - repository:
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+homebrew_casks:
+  - name: brewmaster
+    repository:
       owner: patrickserrano
       name: homebrew-tap
     homepage: https://github.com/patrickserrano/brewmaster
     description: "Audit installed macOS apps and adopt them into Homebrew"
+    license: MIT
+    commit_author:
+      name: goreleaser-bot
+      email: noreply@patrickserrano.com
+    # The binary is unsigned, so macOS Gatekeeper quarantines it on download.
+    # Strip the quarantine attribute on install so `brewmaster` runs immediately.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "#{staged_path}/brewmaster"],
+              sudo: false
+          end
+
 release:
   github:
     owner: patrickserrano
     name: brewmaster
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
