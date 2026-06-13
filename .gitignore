@@ -4,6 +4,9 @@
 # GoReleaser output
 dist/
 
+# MkDocs build output
+/site/
+
 # Scratch/test artifacts
 tmp/
 *.test

@@ -1,0 +1,2 @@
+# Documentation site toolchain. Pinned to the version used locally.
+mkdocs-shadcn==0.10.7
